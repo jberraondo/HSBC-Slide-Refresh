@@ -73,7 +73,7 @@ function addChart(pres, slide, b) {
   } else if (b.kind === 'bar') {
     const s = b.series[0];
     slide.addChart(pres.charts.BAR, [{ name: s.name || 'Value', labels: b.cats, values: s.values.map((v) => v ?? 0) }], axisText(b, {
-      ...box, ...title, barDir: b.horizontal ? 'bar' : 'col', chartColors: b.pointColors, barGapWidthPct: 60,
+      ...box, ...title, barDir: b.horizontal ? 'bar' : 'col', chartColors: b.pointColors, barGapWidthPct: 60, ...(b.horizontal ? { catAxisOrientation: 'maxMin' } : {}),
       showLegend: false, showValue: true, dataLabelFormatCode: b.numFmt, dataLabelFontFace: F.body, dataLabelFontSize: 9, dataLabelColor: b.labelColor,
       dataLabelPosition: 'outEnd', valAxisLabelFormatCode: b.numFmt,
     }));

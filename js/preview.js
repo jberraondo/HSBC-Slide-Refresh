@@ -30,6 +30,14 @@ function chartSvg(b) {
       const pts = s.values.map((v, i) => (v == null ? null : `${X(i)},${Y(v)}`)).filter(Boolean).join(' ');
       svg += `<polyline points="${pts}" fill="none" stroke="#${b.colors[si]}" stroke-width="3"/>`;
     });
+  } else if (b.kind === 'bar' && b.horizontal) {
+    const vals = b.series[0].values.map((v) => v || 0), max = Math.max(...vals, 1), n = vals.length, lx = 110;
+    const rh = (h - top - 10) / Math.max(n, 1);
+    vals.forEach((v, i) => {
+      const bw = ((w - lx - 20) * v) / max, y = top + i * rh;
+      svg += `<text x="${lx - 8}" y="${y + rh * 0.65}" text-anchor="end" font-size="12" fill="#${b.textColor || '767676'}">${esc(b.cats[i])}</text>`;
+      svg += `<rect x="${lx}" y="${y + rh * 0.18}" width="${Math.max(bw, 2)}" height="${rh * 0.64}" fill="#${b.pointColors[i]}"/>`;
+    });
   } else if (b.kind === 'bar') {
     const vals = b.series[0].values.map((v) => v || 0), max = Math.max(...vals, 1), n = vals.length;
     const bw = (w - 2 * pad) / n;

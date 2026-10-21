@@ -55,15 +55,26 @@ function header(m, T, w = CW) {
 const compColor = (T, label, c) => {
   const tok = c.split(' ')[0];
   if (/^(=|\+\/-)/.test(tok)) return T.muted;
-  if (/cpv|cost/i.test(label)) return tok.startsWith('+') ? T.bad : T.good;
-  return tok.startsWith('+') ? T.good : tok.startsWith('-') ? T.bad : T.muted;
+  if (/cpv|cost/i.test(label)) return tok.startsWith('-') ? T.good : T.bad;
+  return tok.startsWith('+') || /^\d/.test(tok) ? T.good : tok.startsWith('-') ? T.bad : T.muted;
 };
 const compPara = (c, size, color, signColor) => {
   const sp = c.indexOf(' ');
   const tok = sp > 0 ? c.slice(0, sp) : c, rest = sp > 0 ? c.slice(sp) : '';
-  if (/^[+\-=]/.test(tok)) return para([run(tok, size, signColor, true), run(rest, size, color)], { after: 2 });
+  if (/^[+\-=]|^\d[\d.,]*%$/.test(tok)) return para([run(tok, size, signColor, true), run(rest, size, color)], { after: 2 });
   return para(run(c, size, color), { after: 2 });
 };
+
+// Largest font size (down to `min`) at which these paragraphs roughly fit a w x h box.
+// Univers Light averages about 0.5em per character; lines are about 1.2em tall.
+export function fitSize(texts, w, h, start, min = 7.5, gapPt = 8) {
+  for (let size = start; size > min; size -= 0.5) {
+    const perLine = Math.max(1, (w * 72) / (size * 0.56));
+    const lines = texts.reduce((n, t) => n + Math.max(1, Math.ceil(t.length / perLine)), 0);
+    if ((lines * size * 1.2 + texts.length * gapPt) / 72 <= h) return size;
+  }
+  return min;
+}
 
 function copyParas(m, T, size, color = T.text) {
   return (m.bullets || []).map((b) => (/:$/.test(b) && b.length < 120
@@ -84,7 +95,7 @@ function factsAndBullets(m, T, x, y, w, h) {
     yy += 0.18;
   }
   if (m.bullets && m.bullets.length) {
-    const size = m.bullets.join(' ').length > 900 ? 10 : 11;
+    const size = fitSize(m.bullets, w - 0.25, y + h - yy, 11);
     out.push(text(x, yy, w, y + h - yy, copyParas(m, T, size)));
   }
   return out;
@@ -292,7 +303,7 @@ const stats = [
         out.push(text(x + 2.7, y + 0.05, w - 2.7, rowsH - 0.1, f.comps.map((c) => compPara(c, 10, T.muted, compColor(T, f.label, c)))));
         out.push(rect(x, y + rowsH - 0.08, w, 0.01, T.line));
       });
-      if (withCopy(m)) out.push(text(x, TOP + rest.slice(0, 5).length * rowsH, w, rowsH, copyParas(m, T, 10)));
+      if (withCopy(m)) { const hh = BOTTOM - (TOP + rest.slice(0, 5).length * rowsH); out.push(text(x, BOTTOM - hh, w, hh, copyParas(m, T, fitSize(m.bullets || [], w - 0.25, hh, 10)))); }
       return out;
     },
   },
@@ -308,8 +319,12 @@ const stats = [
       out.push(rect(M, 3.75, CW, 0.012, T.line));
       const hasFacts = m.facts && m.facts.length;
       if (hasFacts) out.push(text(M, 4.0, 2.2, 2.8, m.facts.map((t, j) => para(run(t, 10, j % 3 === 0 ? T.text : T.muted, j % 3 === 0), { after: 1 }))));
-      const bx = hasFacts ? M + 2.4 : M, bw = SW - M - bx, bl = (m.bullets || []).slice(0, 3), cols = Math.max(bl.length, 1);
-      bl.forEach((b, i) => out.push(text(bx + i * (bw / cols), 4.0, bw / cols - 0.25, 2.9, [para(run(b, 11, T.text), { bullet: T.accent })])));
+      const bx = hasFacts ? M + 2.4 : M, bw = SW - M - bx, bl = m.bullets || [], cols = Math.min(Math.max(bl.length, 1), 3);
+      const per = Math.ceil(bl.length / cols);
+      for (let c = 0; c < cols; c++) {
+        const part = bl.slice(c * per, (c + 1) * per), cw = bw / cols - 0.25, size = fitSize(bl.slice(0, per), cw - 0.25, 2.9, 11);
+        out.push(text(bx + c * (bw / cols), 4.0, cw, 2.9, part.map((b) => para(run(b, size, T.text), { after: 6, bullet: T.accent }))));
+      }
       return out;
     },
   },
@@ -676,14 +691,153 @@ const textOpts = [
   },
 ];
 
+// ---------- reading results tables ----------
+const METRIC = /impression|view|engagement|eng\.?\s*rate|reach|post|spend|cpv|cost|click|follower|share|like|comment|save/i;
+const LOWER_IS_BETTER = /cpv|cost/i;
+function cellNum(s) {
+  if (s == null) return null;
+  const t = String(s).replace(/[£$€,\s]/g, '');
+  if (!/^-?\d+(\.\d+)?%?$/.test(t)) return null;
+  return parseFloat(t);
+}
+function shortCell(s) {
+  const t = String(s || '').trim();
+  if (/%$/.test(t)) return t;
+  const n = cellNum(t);
+  if (n == null) return t || '–';
+  const money = /^[£$€]/.test(t) ? t[0] : '';
+  if (Math.abs(n) >= 10000) return money + fmt(n);
+  return t;
+}
+// Turns table rows into { entities, metrics } when rows are metrics (Posts, Views…) and
+// columns are pieces/channels; or { cats, cols } when rows are categories (18-24, UK…).
+function readTable(rows) {
+  if (!rows || rows.length < 2) return null;
+  const head = rows[0].map((h) => h.trim());
+  const body = rows.slice(1).filter((r) => r.some((c) => c && c.trim()));
+  const metricRows = body.filter((r) => METRIC.test(r[0] || ''));
+  if (metricRows.length >= 2 && head.length >= 2) {
+    const entities = head.slice(1).map((name, i) => ({ name: name || `Column ${i + 1}`, total: /^totals?$/i.test(name) }));
+    const metrics = metricRows.map((r) => ({ label: r[0].trim(), raw: r.slice(1), vals: r.slice(1).map(cellNum) }));
+    return { kind: 'metrics', entities, metrics };
+  }
+  const numericCols = head.slice(1).map((h, i) => ({ name: h || `Value ${i + 1}`, vals: body.map((r) => cellNum(r[i + 1])) }))
+    .filter((c) => c.vals.filter((v) => v != null).length >= 2);
+  if (numericCols.length) return { kind: 'cats', cats: body.map((r) => r[0]), cols: numericCols };
+  return null;
+}
+const PREF = [/view/i, /impression/i, /engagement$|engagements/i, /rate/i];
+function pickMetrics(metrics, n) {
+  const picked = [];
+  for (const re of PREF) { const m = metrics.find((x) => re.test(x.label) && !picked.includes(x)); if (m) picked.push(m); }
+  for (const m of metrics) if (!picked.includes(m)) picked.push(m);
+  return picked.slice(0, n);
+}
+const firstMetricTable = (m) => m.tables.map(readTable).find((t) => t && t.kind === 'metrics');
+const tableBox = (T, x, y, w, h, rows) => ({ t: 'table', x, y, w, h, rows, head: T.accent, onHead: T.onAccent, rowA: T.surface, rowB: T.bg, ink: T.onSurface });
+
+function photosColumn(T, pics, x, y, w, h) {
+  const list = pics.slice(0, 3), g = 0.15, ph = (h - g * (list.length - 1)) / Math.max(list.length, 1);
+  return list.map((p, i) => image(T, x, y + i * (ph + g), w, ph, p, p.graphic ? 'contain' : 'cover'));
+}
+
 const tableOpts = [
   {
-    id: 'table', name: 'Styled tables with copy',
+    id: 'scorecards', name: 'Scorecards',
+    when: (m) => { const t = firstMetricTable(m); return t && t.entities.length >= 2 && t.entities.length <= 5; },
     render(m, { theme: T }) {
-      const out = header(m, T), left = withCopy(m);
+      const out = header(m, T), t = firstMetricTable(m), n = t.entities.length;
+      const hasCopy = m.bullets && m.bullets.length, cardH = hasCopy ? 3.35 : 5.35, gap = 0.18, w = (CW - gap * (n - 1)) / n;
+      const [lead, ...others] = pickMetrics(t.metrics, 7);
+      // best value in each row (ignoring a Totals column)
+      const best = t.metrics.map((mt) => {
+        const vals = mt.vals.map((v, i) => (t.entities[i].total ? null : v));
+        const ok = vals.filter((v) => v != null);
+        if (ok.length < 2) return -1;
+        const target = LOWER_IS_BETTER.test(mt.label) ? Math.min(...ok) : Math.max(...ok);
+        return vals.indexOf(target);
+      });
+      t.entities.forEach((e, i) => {
+        const x = M + i * (w + gap), y = 1.5, totalCard = e.total;
+        const fill = totalCard ? T.statFill : T.surface, ink = totalCard ? T.onStat : T.onSurface, big = totalCard ? T.statNum : T.onSurface;
+        out.push(rect(x, y, w, cardH, fill), rect(x, y, w, 0.06, totalCard ? T.bar : ca(T)));
+        out.push(text(x, y + 0.1, w, 0.75, [para(run(e.name, 13, ink, true))], { inset: 0.16, valign: 'middle' }));
+        out.push(text(x, y + 0.85, w, 0.85, [para(run(shortCell(lead.raw[i]), 30, big, true)), para(run(lead.label, 10, totalCard ? T.onStat : T.muted))], { inset: 0.16 }));
+        const rowsN = Math.ceil(others.length / 2), rh = Math.min(0.55, (cardH - 1.85) / Math.max(rowsN, 1));
+        others.forEach((mt, j) => {
+          const isBest = best[t.metrics.indexOf(mt)] === i;
+          out.push(text(x + 0.16 + (j % 2) * ((w - 0.32) / 2), y + 1.8 + Math.floor(j / 2) * rh, (w - 0.32) / 2, rh, [
+            para(run(shortCell(mt.raw[i]), 13, isBest && !totalCard ? ca(T) : ink, true)), para(run(mt.label, 8.5, totalCard ? T.onStat : T.muted)),
+          ]));
+        });
+      });
+      if (hasCopy) {
+        const bl = m.bullets.filter((b) => !/:$/.test(b)).slice(0, 4), k = Math.max(Math.min(bl.length, 2), 1), bw = (CW - 0.4 * (k - 1)) / k;
+        const halves = k === 1 ? [bl] : [bl.slice(0, Math.ceil(bl.length / 2)), bl.slice(Math.ceil(bl.length / 2))];
+        halves.forEach((h, i) => out.push(text(M + i * (bw + 0.4), 5.05, bw, 1.95, h.map((b) => para(run(b, fitSize(h, bw - 0.25, 1.9, 9.5, 7), T.text), { after: 6, bullet: T.accent })))));
+      }
+      return out;
+    },
+  },
+  {
+    id: 'tiles', name: 'Key results with photos',
+    when: (m) => !!firstMetricTable(m),
+    render(m, { theme: T }) {
+      const out = header(m, T), t = firstMetricTable(m);
+      let col = t.entities.findIndex((e) => e.total);
+      if (col < 0) col = t.entities.length - 1;
+      const metrics = pickMetrics(t.metrics, 6).filter((mt) => mt.raw[col] && mt.raw[col].trim() && mt.raw[col].trim() !== '/');
+      const pics = m.pics || [];
+      const copyW = 4.1, picsW = pics.length ? 3.4 : 0;
+      const tx = M + copyW + 0.3, tw = SW - M - tx - (picsW ? picsW + 0.3 : 0);
+      out.push(text(M, 1.5, copyW, 5.45, [
+        para(run(t.entities[col].total ? 'Totals' : t.entities[col].name, 11, T.accent, true), { after: 6 }),
+        ...((bl) => bl.map((b) => para(run(b, fitSize(bl, copyW, 5.0, 10), T.text), { after: 6 })))((m.bullets || []).filter((b) => !/^(overview|evaluation of content)$/i.test(b)).slice(0, 4)),
+      ]));
+      const cols = 2, rows = Math.ceil(metrics.length / cols), g = 0.16, w = (tw - g) / cols, h = Math.min(1.6, (5.45 - g * (rows - 1)) / Math.max(rows, 1));
+      metrics.forEach((mt, i) => out.push(...statCard(T, { num: shortCell(mt.raw[col]), label: mt.label, comps: [] }, tx + (i % cols) * (w + g), 1.5 + Math.floor(i / cols) * (h + g), w, h, { big: 26 })));
+      if (picsW) out.push(...photosColumn(T, pics, SW - M - picsW, 1.5, picsW, 5.45));
+      return out;
+    },
+  },
+  {
+    id: 'charts', name: 'Table as charts',
+    when: (m) => m.tables.map(readTable).some((t) => t && (t.kind === 'cats' || t.entities.filter((e) => !e.total).length >= 2)),
+    render(m, { theme: T }) {
+      const out = header(m, T), specs = [];
+      for (const t of m.tables.map(readTable)) {
+        if (!t) continue;
+        if (t.kind === 'metrics') {
+          const keep = t.entities.map((e, i) => (e.total ? -1 : i)).filter((i) => i >= 0);
+          for (const mt of pickMetrics(t.metrics, 3)) {
+            if (keep.filter((i) => mt.vals[i] != null).length < 2) continue;
+            specs.push({ title: mt.label, cats: keep.map((i) => t.entities[i].name), values: keep.map((i) => mt.vals[i] ?? 0), horizontal: false });
+          }
+        } else {
+          for (const c of t.cols) specs.push({ title: c.name, cats: t.cats.slice(0, 12), values: c.vals.slice(0, 12).map((v) => v ?? 0), horizontal: true });
+        }
+      }
+      const list = specs.slice(0, 3), left = withCopy(m), gx = left ? 4.6 : M, gw = SW - M - gx;
       if (left) out.push(...factsAndBullets(m, T, M, TOP, 3.9, BOTTOM - TOP));
-      const gx = left ? 4.6 : M, gw = SW - M - gx, n = Math.min(m.tables.length, 3), w = (gw - 0.2 * (n - 1)) / n;
-      m.tables.slice(0, 3).forEach((rows, i) => out.push({ t: 'table', x: gx + i * (w + 0.2), y: TOP, w, h: BOTTOM - TOP, rows, head: T.accent, onHead: T.onAccent, rowA: T.surface, rowB: T.bg, ink: T.onSurface }));
+      const n = Math.max(list.length, 1), w = (gw - 0.18 * (n - 1)) / n;
+      list.forEach((s, i) => {
+        const x = gx + i * (w + 0.18);
+        const spec = { ...barSpec(T, { title: s.title, cats: s.cats, series: [{ name: s.title, values: s.values }] }), horizontal: s.horizontal };
+        if (s.horizontal) { const top = Math.max(...s.values); spec.pointColors = s.values.map((v) => (v === top ? T.chart[0] : T.chart[1])); }
+        out.push(...card(T, x, 1.45, w, 5.5), chart(x, 1.53, w, 5.38, spec));
+      });
+      return out;
+    },
+  },
+  {
+    id: 'table', name: 'Styled table with copy',
+    render(m, { theme: T }) {
+      const out = header(m, T), left = withCopy(m), pics = m.pics || [];
+      if (left) out.push(...factsAndBullets(m, T, M, TOP, 3.9, BOTTOM - TOP));
+      const picsW = pics.length ? 3.0 : 0;
+      const gx = left ? 4.6 : M, gw = SW - M - gx - (picsW ? picsW + 0.25 : 0), n = Math.min(m.tables.length, 3), w = (gw - 0.2 * (n - 1)) / n;
+      m.tables.slice(0, 3).forEach((rows, i) => out.push(tableBox(T, gx + i * (w + 0.2), TOP, w, BOTTOM - TOP, rows.map((r) => r.map(shortCell)))));
+      if (picsW) out.push(...photosColumn(T, pics, SW - M - picsW, TOP, picsW, BOTTOM - TOP));
       return out;
     },
   },
