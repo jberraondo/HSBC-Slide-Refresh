@@ -15,7 +15,7 @@ Everything runs in your browser. **Your file is never uploaded anywhere**, so it
 
 ## Themes
 
-Pick a theme at the top of the slide list and every layout and preview switches to it:
+Every layout is offered in every look. Under each slide there's a row of options per look (scroll sideways for more layouts), so each slide can use a different look, e.g. dark dividers with classic stat cards:
 
 | Theme | Look |
 |---|---|
@@ -28,7 +28,7 @@ Pick a theme at the top of the slide list and every layout and preview switches 
 | Mono | Black and white, red only for drops |
 | Blockbuster Gold | Black with gold highlights |
 
-The chosen theme is remembered on that computer. To add or change a theme, edit `THEMES` in [`js/style.js`](js/style.js).
+To add or change a look, edit `THEMES` in [`js/style.js`](js/style.js); it appears as a new row of options automatically.
 
 ## What it recognises
 

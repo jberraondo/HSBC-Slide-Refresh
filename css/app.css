@@ -48,7 +48,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* slide rows */
 .slide-row { padding: 20px 0 24px; border-bottom: 1px solid var(--line); }
-.slide-row.is-off .options { opacity: .45; }
+.slide-row.is-off .looks { opacity: .45; }
 .row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 12px; }
 .include { display: flex; gap: 8px; align-items: center; font-weight: 600; white-space: nowrap; }
 .include input, .check input { width: 18px; height: 18px; accent-color: var(--red); }
@@ -97,13 +97,15 @@ button, input, select { font: inherit; color: inherit; }
   .options { grid-template-columns: 1fr; }
 }
 
-/* theme picker */
-.theme-pick { border: 0; padding: 14px 0 6px; margin: 0; border-bottom: 1px solid var(--line); }
-.theme-pick legend { font-size: 14px; color: var(--grey); padding: 0; margin-bottom: 8px; }
-.themes { display: flex; flex-wrap: wrap; gap: 10px; }
-.theme { display: flex; align-items: center; gap: 10px; background: #fff; border: 2px solid var(--line); padding: 6px 12px 6px 6px; cursor: pointer; font-size: 14px; }
-.theme:hover { border-color: var(--grey); }
-.theme.is-chosen { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); font-weight: 600; }
-.theme:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
-.swatch { display: inline-flex; gap: 3px; padding: 5px; border: 1px solid rgba(0,0,0,.15); }
-.swatch i { display: block; width: 12px; height: 22px; }
+/* every look as a row of options: two looks side by side, each a sideways-scrolling strip */
+.chosen-label { font-size: 13px; color: var(--red); font-weight: 600; white-space: nowrap; }
+.looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.look-row { min-width: 0; }
+.look-name { margin: 0 0 6px; font-size: 13px; color: var(--soft); display: flex; gap: 8px; align-items: center; }
+.strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+.strip .option { flex: 0 0 224px; scroll-snap-align: start; }
+.strip .option-name { padding: 5px 8px; font-size: 12px; }
+.strip .pv-frame { width: 220px; aspect-ratio: auto; height: 124px; }
+.swatch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid rgba(0,0,0,.15); }
+.swatch i { display: block; width: 8px; height: 14px; }
+@media (max-width: 900px) { .looks { grid-template-columns: 1fr; } }
