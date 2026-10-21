@@ -7,9 +7,7 @@ import { renderPreview } from './preview.js';
 import { imageMaker, thumbFor, markGraphics, makeGradient } from './images.js';
 
 const $ = (s) => document.querySelector(s);
-let savedTheme = null;
-try { savedTheme = localStorage.getItem('slide-refresh-theme'); } catch { /* storage unavailable */ }
-const state = { deck: null, fileName: '', rows: [], thumbs: new Map(), showHidden: false, theme: THEMES[savedTheme] ? savedTheme : DEFAULT_THEME };
+const state = { deck: null, fileName: '', rows: [], thumbs: new Map(), showHidden: false };
 
 // ---------- loading ----------
 async function load(file) {
@@ -42,7 +40,7 @@ async function load(file) {
 function makeRow(slide, type, include) {
   const model = extract(slide, type);
   const options = optionsFor(model);
-  return { slide, type, model, options, choice: 0, include: include && type !== 'cover' };
+  return { slide, type, model, options, choice: 0, look: DEFAULT_THEME, include: include && type !== 'cover' };
 }
 
 async function loadThumbs() {
@@ -61,14 +59,23 @@ async function loadThumbs() {
 }
 
 // ---------- rendering ----------
-function ctxFor(row) {
+// Every layout is offered in every look. Each slide shows one scrolling strip per look;
+// clicking any preview picks that layout in that look for that slide.
+const LOOKS = Object.keys(THEMES);
+
+function ctxFor(row, look) {
   let section = 0;
   for (const r of state.rows) {
     if (r.include && r.type === 'divider') section++;
     if (r === row) break;
   }
-  return { section: Math.max(section, 1), label: `${STYLE.report}  |  ${$('#report-name').value.trim() || 'Report'}`, theme: THEMES[state.theme] };
+  return { section: Math.max(section, 1), label: `${STYLE.report}  |  ${$('#report-name').value.trim() || 'Report'}`, theme: THEMES[look] };
 }
+
+// strips are drawn when they scroll into view, so long decks stay quick
+const lazy = new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting) { lazy.unobserve(e.target); e.target._draw(); }
+}, { rootMargin: '600px 0px' });
 
 function renderAll() {
   const list = $('#slides');
@@ -78,7 +85,31 @@ function renderAll() {
     list.appendChild(renderRow(row, i));
   });
   updateCount();
-  fitPreviews();
+}
+
+function optionButton(row, i, look, k) {
+  const o = row.options[k];
+  const chosen = row.look === look && row.choice === k;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'option' + (chosen ? ' is-chosen' : '');
+  b.setAttribute('aria-pressed', chosen);
+  b.title = `${o.name}, ${THEMES[look].name}`;
+  let preview;
+  try { preview = renderPreview(renderWith(o, row.model, ctxFor(row, look)), state.thumbs); }
+  catch (e) { console.error(e); preview = '<div class="pv-slide pv-error">Preview unavailable</div>'; }
+  b.innerHTML = `<div class="pv-frame">${preview}</div><span class="option-name">${escapeHtml(o.name)}</span>`;
+  b.addEventListener('click', () => {
+    row.choice = k; row.look = look; row.include = true;
+    const el = b.closest('.slide-row');
+    el.classList.remove('is-off');
+    el.querySelector('.include input').checked = true;
+    el.querySelectorAll('.option.is-chosen').forEach((x) => { x.classList.remove('is-chosen'); x.setAttribute('aria-pressed', 'false'); });
+    b.classList.add('is-chosen'); b.setAttribute('aria-pressed', 'true');
+    el.querySelector('.chosen-label').textContent = `${o.name} · ${THEMES[look].name}`;
+    updateCount();
+  });
+  return b;
 }
 
 function renderRow(row, i) {
@@ -87,31 +118,34 @@ function renderRow(row, i) {
   el.dataset.index = i;
   const typeOpts = Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === row.type ? 'selected' : ''}>${v}</option>`).join('');
   const heading = row.model.title || row.model.subtitle || '(no title)';
+  const chosenName = row.options[row.choice] ? `${row.options[row.choice].name} · ${THEMES[row.look].name}` : '';
   el.innerHTML = `
     <header class="row-head">
       <label class="include"><input type="checkbox" ${row.include ? 'checked' : ''} aria-label="Include slide ${row.slide.number}"> <span>Slide ${row.slide.number}${row.slide.hidden ? ' (hidden)' : ''}</span></label>
       <p class="row-title" title="${escapeAttr(heading)}">${escapeHtml(heading)}</p>
+      <span class="chosen-label">${escapeHtml(chosenName)}</span>
       <label class="type">Slide type <select>${typeOpts}</select></label>
     </header>
-    <div class="options"></div>`;
-  const opts = el.querySelector('.options');
-  if (!row.options.length) opts.innerHTML = '<p class="muted">No layouts for this slide type.</p>';
-  row.options.forEach((o, k) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'option' + (k === row.choice ? ' is-chosen' : '');
-    b.setAttribute('aria-pressed', k === row.choice);
-    let preview;
-    try { preview = renderPreview(renderWith(o, row.model, ctxFor(row)), state.thumbs); }
-    catch (e) { console.error(e); preview = '<div class="pv-slide pv-error">Preview unavailable</div>'; }
-    b.innerHTML = `<div class="pv-frame">${preview}</div><span class="option-name">${escapeHtml(o.name)}</span>`;
-    b.addEventListener('click', () => { row.choice = k; row.include = true; rerender(i); });
-    opts.appendChild(b);
-  });
-  el.querySelector('.include input').addEventListener('change', (e) => { row.include = e.target.checked; rerender(i); refreshDividers(); });
+    <div class="looks"></div>`;
+  const looks = el.querySelector('.looks');
+  if (!row.options.length) looks.innerHTML = '<p class="muted">No layouts for this slide type.</p>';
+  else for (const look of LOOKS) {
+    const t = THEMES[look];
+    const lr = document.createElement('div');
+    lr.className = 'look-row';
+    lr.innerHTML = `<p class="look-name"><span class="swatch" style="background:#${t.bg}"><i style="background:#${t.glow ? t.glow[0] : t.panel}"></i><i style="background:#${t.surface}"></i><i style="background:#${t.accent}"></i></span>${escapeHtml(t.name)}</p><div class="strip" role="group" aria-label="${escapeAttr(t.name)} layouts"></div>`;
+    const strip = lr.querySelector('.strip');
+    strip.style.minHeight = '160px';
+    strip._draw = () => { row.options.forEach((_, k) => strip.appendChild(optionButton(row, i, look, k))); strip.style.minHeight = ''; };
+    lazy.observe(strip);
+    looks.appendChild(lr);
+  }
+  el.querySelector('.include input').addEventListener('change', (e) => { row.include = e.target.checked; el.classList.toggle('is-off', !row.include); updateCount(); });
   el.querySelector('.type select').addEventListener('change', (e) => {
+    const look = row.look;
     state.rows[i] = makeRow(row.slide, e.target.value, true);
-    rerender(i); refreshDividers();
+    state.rows[i].look = look;
+    rerender(i);
   });
   return el;
 }
@@ -120,10 +154,6 @@ function rerender(i) {
   const old = document.querySelector(`.slide-row[data-index="${i}"]`);
   if (old) old.replaceWith(renderRow(state.rows[i], i));
   updateCount();
-  fitPreviews();
-}
-function refreshDividers() {
-  state.rows.forEach((r, i) => { if (r.type === 'divider' || r.type === 'contents') rerender(i); });
 }
 function updateCount() {
   const n = state.rows.filter((r) => r.include && r.options.length).length;
@@ -139,8 +169,7 @@ async function download() {
   btn.disabled = true;
   setStatus(`Building ${chosen.length} slides…`);
   try {
-    const bg = THEMES[state.theme].bg;
-    const entries = chosen.map((r) => ({ background: bg, boxes: renderWith(r.options[r.choice], r.model, ctxFor(r)) }));
+    const entries = chosen.map((r) => ({ background: THEMES[r.look].bg, boxes: renderWith(r.options[r.choice], r.model, ctxFor(r, r.look)) }));
     const pres = await buildPptx(entries, { PptxGenJS: window.PptxGenJS, getImageData: imageMaker(state.deck), getGradient: makeGradient });
     const bytes = await finishFile(await pres.write({ outputType: 'arraybuffer' }), window.JSZip);
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
@@ -156,34 +185,8 @@ async function download() {
   } finally { updateCount(); }
 }
 
-// previews are drawn at full slide size and scaled to fit their frame
-function fitPreviews() {
-  const frame = document.querySelector('.pv-frame');
-  if (frame) document.documentElement.style.setProperty('--pv-scale', String(frame.clientWidth / 1333));
-}
-new ResizeObserver(fitPreviews).observe(document.body);
-
-// ---------- theme picker ----------
-function renderThemes() {
-  const box = $('#themes');
-  box.innerHTML = '';
-  Object.entries(THEMES).forEach(([key, t]) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'theme' + (key === state.theme ? ' is-chosen' : '');
-    b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', key === state.theme);
-    b.innerHTML = `<span class="swatch" style="background:#${t.bg}"><i style="background:#${t.glow ? t.glow[0] : t.panel}"></i><i style="background:#${t.surface}"></i><i style="background:#${t.accent}"></i></span><span>${t.name}</span>`;
-    b.addEventListener('click', () => {
-      state.theme = key;
-      try { localStorage.setItem('slide-refresh-theme', key); } catch { /* storage unavailable */ }
-      renderThemes();
-      if (state.rows.length) renderAll();
-    });
-    box.appendChild(b);
-  });
-}
-renderThemes();
+// previews have a fixed width, so the scale is fixed too (see .pv-frame in css/app.css)
+document.documentElement.style.setProperty('--pv-scale', String(220 / 1333));
 
 // ---------- helpers & wiring ----------
 function setStatus(msg, isError = false) { const s = $('#status'); s.textContent = msg; s.classList.toggle('is-error', isError); }
@@ -197,7 +200,7 @@ $('#file').addEventListener('change', (e) => e.target.files[0] && load(e.target.
 drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) load(f); });
 $('#download').addEventListener('click', download);
 $('#show-hidden').addEventListener('change', (e) => { state.showHidden = e.target.checked; renderAll(); });
-$('#report-name').addEventListener('change', refreshDividers);
+$('#report-name').addEventListener('change', renderAll);
 $('#select-all').addEventListener('click', () => { state.rows.forEach((r) => { if (!r.slide.hidden && r.type !== 'cover') r.include = true; }); renderAll(); });
 $('#select-none').addEventListener('click', () => { state.rows.forEach((r) => { r.include = false; }); renderAll(); });
 
