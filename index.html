@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HSBC Slide Refresh</title>
+  <meta name="description" content="Restyle PowerPoint slides into the HSBC Sport report look. Runs in your browser; files are never uploaded.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpolygon points='0,20 10,0 30,0 40,20 30,40 10,40' fill='%23c00000'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <span class="mark" aria-hidden="true"></span>
+      <h1>HSBC Slide Refresh</h1>
+      <p class="lede">Turn report slides into the HSBC Sport look: stat cards, content cards, charts and dividers. Your file stays on your computer; nothing is uploaded.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="steps" aria-label="How it works">
+      <ol>
+        <li><strong>Add a .pptx</strong> file with the slides you want to refresh.</li>
+        <li><strong>Pick a layout</strong> for each slide. Untick slides you don't need.</li>
+        <li><strong>Download</strong> the new slides and paste them into your deck in PowerPoint.</li>
+      </ol>
+    </section>
+
+    <label id="drop" class="drop" for="file">
+      <input id="file" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+      <span class="drop-title">Drop a PowerPoint file here, or click to choose one</span>
+      <span class="drop-sub">.pptx only. Processed in your browser.</span>
+    </label>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <div id="workspace" hidden>
+      <div class="toolbar">
+        <label class="field">Report name (shown on dividers)
+          <input id="report-name" type="text" placeholder="e.g. Q3 Report 2026">
+        </label>
+        <label class="check"><input id="show-hidden" type="checkbox"> Show hidden slides</label>
+        <div class="toolbar-actions">
+          <button id="select-all" type="button" class="link">Select all</button>
+          <button id="select-none" type="button" class="link">Select none</button>
+        </div>
+      </div>
+      <div id="slides"></div>
+      <div class="dock">
+        <button id="download" type="button" class="primary" disabled>Choose some slides first</button>
+        <p class="dock-note">Fonts are set to Univers Next for HSBC, so the file looks right on laptops with the HSBC fonts installed. Previews here use a stand-in font.</p>
+      </div>
+    </div>
+
+    <section class="about">
+      <h2>Good to know</h2>
+      <ul>
+        <li>It builds <strong>new slides</strong> in the house style from the text, numbers, photos and chart data already in your slides. Expect about 80% of the finish; check figures and wording before sending.</li>
+        <li>Charts are rebuilt as <strong>native PowerPoint charts</strong>, so you can right-click and choose Edit Data. Charts show in PowerPoint; Keynote may show them blank.</li>
+        <li>If a slide's type is guessed wrong, change it with the <strong>Slide type</strong> menu and the layouts update.</li>
+        <li>Grouped shapes, SmartArt and unusual image formats (EMF, WMF) are only partly carried across.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="foot"><div class="wrap">HSBC Slide Refresh · for the HSBC Sport team · runs entirely in your browser</div></footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

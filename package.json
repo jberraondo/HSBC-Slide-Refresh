@@ -1,0 +1,16 @@
+{
+  "name": "hsbc-slide-refresh",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Restyle .pptx slides into the HSBC Sport report look, entirely in the browser.",
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "jszip": "3.10.1",
+    "pptxgenjs": "3.12.0",
+    "puppeteer-core": "^23.11.1",
+    "sharp": "0.33.5"
+  }
+}
