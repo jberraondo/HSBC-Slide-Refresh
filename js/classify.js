@@ -24,7 +24,9 @@ function prep(slide) {
   // owner tags like "Jacob" sit in the top right
   const isTag = (e) => e.kind === 'text' && e.y < 0.7 && e.x > 5 && e.paras.length === 1 && e.paras[0].text.length < 16 && !(e.ph && /title/i.test(e.ph.type));
   const isLogo = (e) => e.kind === 'pic' && (area(e) < 0.6 || /logo/i.test(e.name));
-  const texts = els.filter((e) => e.kind === 'text' && e.paras.length && !(e.ph && SKIP_PH.has(e.ph.type)) && !isTag(e)
+  // stray page numbers typed into a text box ("9") are dropped too
+  const isPageNum = (e) => e.paras.length === 1 && /^\d{1,3}$/.test(e.paras[0].text) && (+e.paras[0].text === slide.number || e.w < 1.2);
+  const texts = els.filter((e) => e.kind === 'text' && e.paras.length && !(e.ph && SKIP_PH.has(e.ph.type)) && !isTag(e) && !isPageNum(e)
     && !/^internal$/i.test(e.paras.map((p) => p.text).join(' ')));
   const pics = els.filter((e) => e.kind === 'pic' && !isLogo(e));
   const charts = els.filter((e) => e.kind === 'chart');
@@ -47,12 +49,32 @@ const allParas = (blocks) => blocks.flatMap((b) => b.paras);
 
 // ---------- extractors ----------
 
+// A figure ("12.3M Impressions") whose comparison lines ("+515% on ...") sit in a
+// separate box just below it: join them into one block.
+function joinComparisons(blocks) {
+  const used = new Set(), out = [];
+  const isFig = (b) => b.paras.length === 1 && NUM.test(b.paras[0].text) && b.paras[0].text.length < 40;
+  const isComp = (b) => b.paras.length && b.paras.every((p) => /^[+\-=]|^\+\/-/.test(p.text) || /\bon\b/i.test(p.text)) && /^[+\-=]/.test(b.paras[0].text);
+  for (const b of blocks) {
+    if (used.has(b)) continue;
+    if (isFig(b)) {
+      const below = blocks.filter((c) => c !== b && !used.has(c) && isComp(c) && c.y > b.y && c.y - (b.y + b.h) < 0.9
+        && c.x < b.x + b.w && c.x + c.w > b.x).sort((a, c) => a.y - c.y)[0];
+      if (below) { used.add(below); out.push({ ...b, paras: [...b.paras, ...below.paras], h: below.y + below.h - b.y }); continue; }
+    }
+    out.push(b);
+  }
+  return out;
+}
+
 function figuresFrom(blocks) {
   const figures = [], rest = [];
-  for (const b of blocks) {
+  for (const b of joinComparisons(blocks)) {
     const p = b.paras;
     const m = p[0].text.match(NUM);
-    const isList = p.length >= 2 && p.every((x) => NUM.test(x.text)) && !p.slice(1).some((x) => /^[+\-=]/.test(x.text));
+    // "44 Posts…, 24 Posts…" is a list of facts; "12.3M Impressions, 515% on…" is a figure with comparisons
+    const word = (x) => (x.text.replace(NUM, '').trim().split(/\s+/)[0] || '').toLowerCase();
+    const isList = p.length >= 2 && p.every((x) => NUM.test(x.text)) && p.every((x) => word(x) === word(p[0]));
     if (m && p[0].text.length < 40 && !isList) {
       let num = m[0].trim(), label = p[0].text.slice(m[0].length).trim(), comps = p.slice(1).map((x) => x.text);
       if (!label && comps.length && !NUM.test(comps[0])) label = comps.shift();
@@ -185,7 +207,7 @@ export function extract(slide, type) {
     case 'cards': return { ...base, ...cardsFrom(p) };
     case 'charts': return { ...base, ...chartsFrom(p) };
     case 'learnings': return { ...base, ...learningsFrom(p) };
-    case 'table': return { ...base, tables: p.tables.map((t) => t.rows), ...splitCopy(p.body) };
+    case 'table': return { ...base, tables: p.tables.sort((a, b) => a.x - b.x).map((t) => t.rows), pics: p.pics.filter((e) => area(e) > 1).sort((a, b) => a.y - b.y || a.x - b.x), ...splitCopy(p.body) };
     default: return { ...base, ...splitCopy(p.body), image: p.pics.sort((a, b) => area(b) - area(a))[0] || null };
   }
 }

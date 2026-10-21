@@ -17,6 +17,7 @@ import { STYLE, THEMES, DEFAULT_THEME } from '../js/style.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const file = process.argv[2] || join(here, 'sample.pptx');
 const firstOnly = process.argv.includes('--first');
+const only = ((process.argv.find((a) => a.startsWith('--slides=')) || '').split('=')[1] || '').split(',').filter(Boolean).map(Number);
 const themeKey = (process.argv.find((a) => a.startsWith('--theme=')) || '').split('=')[1] || DEFAULT_THEME;
 const theme = THEMES[themeKey];
 if (!theme) throw new Error(`Unknown theme "${themeKey}". Try: ${Object.keys(THEMES).join(', ')}`);
@@ -68,6 +69,7 @@ const entries = [];
 let section = 0;
 for (const s of deck.slides) {
   if (s.hidden) continue;
+  if (only.length && !only.includes(s.number)) { if (detect(s) === 'divider') section++; continue; }
   const type = detect(s);
   const model = extract(s, type);
   const opts = optionsFor(model);
