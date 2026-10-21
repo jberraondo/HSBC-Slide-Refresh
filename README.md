@@ -87,3 +87,4 @@ Put real client decks in `tests/private/` (ignored by git) so they're never comm
 ## Publishing
 
 The site is plain static files served by GitHub Pages (Settings → Pages → Deploy from branch → `main`, root). Any push to `main` updates the live page within a minute or two.
+
