@@ -4,7 +4,6 @@
 
 import { STYLE } from './style.js';
 
-const C = STYLE.colors;
 const F = STYLE.fonts;
 
 // Pixel rectangle to keep from an image, after the slide's own crop and a
@@ -18,7 +17,12 @@ export function cropBox(imgW, imgH, crop, boxW, boxH, fit) {
     if (w / h > target) { const nw = h * target; x += (w - nw) / 2; w = nw; }
     else { const nh = w / target; y += (h - nh) / 2; h = nh; }
   }
-  return { x: Math.round(x), y: Math.round(y), w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+  // crops can run past the image edge (negative values in PowerPoint), so keep inside the image
+  if (!isFinite(x)) x = 0;
+  if (!isFinite(y)) y = 0;
+  x = Math.min(Math.max(0, x), imgW - 1); y = Math.min(Math.max(0, y), imgH - 1);
+  w = Math.min(isFinite(w) ? w : imgW, imgW - x); h = Math.min(isFinite(h) ? h : imgH, imgH - y);
+  return { x: Math.round(x), y: Math.round(y), w: Math.max(1, Math.floor(w)), h: Math.max(1, Math.floor(h)) };
 }
 
 function runOpts(r, p, isLastInPara, isFirstInPara) {
@@ -45,14 +49,14 @@ function addText(slide, b) {
   slide.addText(runs, o);
 }
 
-function axisText(o) {
+function axisText(b, o) {
   return {
-    catAxisLabelColor: C.grey, catAxisLabelFontFace: F.body, catAxisLabelFontSize: 9,
-    valAxisLabelColor: C.grey, valAxisLabelFontFace: F.body, valAxisLabelFontSize: 9,
-    valGridLine: { color: C.light, size: 0.5 }, catGridLine: { style: 'none' },
+    catAxisLabelColor: b.textColor, catAxisLabelFontFace: F.body, catAxisLabelFontSize: 9,
+    valAxisLabelColor: b.textColor, valAxisLabelFontFace: F.body, valAxisLabelFontSize: 9,
+    valGridLine: { color: b.gridColor, size: 0.5 }, catGridLine: { style: 'none' },
     catAxisLineShow: false, valAxisLineShow: false,
-    legendFontFace: F.body, legendFontSize: 9, legendColor: C.text,
-    titleFontFace: F.body, titleFontSize: 12, titleColor: C.text,
+    legendFontFace: F.body, legendFontSize: 9, legendColor: b.legendColor,
+    titleFontFace: F.body, titleFontSize: 12, titleColor: b.labelColor,
     ...o,
   };
 }
@@ -62,30 +66,30 @@ function addChart(pres, slide, b) {
   const title = b.title ? { showTitle: true, title: b.title } : { showTitle: false };
   if (b.kind === 'line') {
     const data = b.series.map((s) => ({ name: s.name, labels: b.cats, values: s.values.map((v) => (v == null ? null : v)) }));
-    slide.addChart(pres.charts.LINE, data, axisText({
+    slide.addChart(pres.charts.LINE, data, axisText(b, {
       ...box, ...title, chartColors: b.colors, lineSize: 2, lineDataSymbol: 'circle', lineDataSymbolSize: 5,
       showLegend: true, legendPos: 'b', valAxisLabelFormatCode: b.numFmt,
     }));
   } else if (b.kind === 'bar') {
     const s = b.series[0];
-    slide.addChart(pres.charts.BAR, [{ name: s.name || 'Value', labels: b.cats, values: s.values.map((v) => v ?? 0) }], axisText({
+    slide.addChart(pres.charts.BAR, [{ name: s.name || 'Value', labels: b.cats, values: s.values.map((v) => v ?? 0) }], axisText(b, {
       ...box, ...title, barDir: b.horizontal ? 'bar' : 'col', chartColors: b.pointColors, barGapWidthPct: 60,
-      showLegend: false, showValue: true, dataLabelFormatCode: b.numFmt, dataLabelFontFace: F.body, dataLabelFontSize: 9, dataLabelColor: C.text,
+      showLegend: false, showValue: true, dataLabelFormatCode: b.numFmt, dataLabelFontFace: F.body, dataLabelFontSize: 9, dataLabelColor: b.labelColor,
       dataLabelPosition: 'outEnd', valAxisLabelFormatCode: b.numFmt,
     }));
   } else if (b.kind === 'bar100') {
     const data = b.series.map((s) => ({ name: s.name, labels: b.cats, values: s.values.map((v) => v ?? 0) }));
-    slide.addChart(pres.charts.BAR, data, axisText({
+    slide.addChart(pres.charts.BAR, data, axisText(b, {
       ...box, showTitle: false, barDir: 'bar', barGrouping: 'percentStacked', chartColors: b.colors, barGapWidthPct: 70,
-      catAxisOrientation: 'maxMin', valAxisHidden: true, valGridLine: { style: 'none' }, catAxisLabelFontSize: 12, catAxisLabelColor: C.text,
+      catAxisOrientation: 'maxMin', valAxisHidden: true, valGridLine: { style: 'none' }, catAxisLabelFontSize: 12, catAxisLabelColor: b.labelColor,
       showLegend: true, legendPos: 't', showValue: true, dataLabelFormatCode: b.numFmt, dataLabelPosition: 'ctr',
-      dataLabelFontFace: F.body, dataLabelFontSize: 10, dataLabelColor: C.white, dataLabelFontBold: true,
+      dataLabelFontFace: F.body, dataLabelFontSize: 10, dataLabelColor: 'FFFFFF', dataLabelFontBold: true,
     }));
   } else if (b.kind === 'donut') {
     const s = b.series[0];
-    slide.addChart(pres.charts.DOUGHNUT, [{ name: s.name || 'Value', labels: b.cats, values: s.values.map((v) => v ?? 0) }], axisText({
+    slide.addChart(pres.charts.DOUGHNUT, [{ name: s.name || 'Value', labels: b.cats, values: s.values.map((v) => v ?? 0) }], axisText(b, {
       ...box, ...title, chartColors: b.pointColors, holeSize: 62, showLegend: true, legendPos: 'b',
-      showPercent: true, showValue: false, dataLabelColor: C.white, dataLabelFontFace: F.body, dataLabelFontSize: 9,
+      showPercent: true, showValue: false, dataLabelColor: 'FFFFFF', dataLabelFontFace: F.body, dataLabelFontSize: 9,
     }));
   }
 }
@@ -94,10 +98,23 @@ function addTable(slide, b) {
   const rows = b.rows.map((r, i) => r.map((cell) => ({
     text: cell,
     options: i === 0
-      ? { bold: true, color: C.white, fill: { color: C.red }, fontFace: F.body, fontSize: 9 }
-      : { color: C.text, fill: { color: i % 2 ? C.card : C.white }, fontFace: F.body, fontSize: 9 },
+      ? { bold: true, color: b.onHead, fill: { color: b.head }, fontFace: F.body, fontSize: 9 }
+      : { color: b.ink, fill: { color: i % 2 ? b.rowA : b.rowB }, fontFace: F.body, fontSize: 9 },
   })));
-  slide.addTable(rows, { x: b.x, y: b.y, w: b.w, border: { type: 'solid', pt: 0.5, color: C.white }, valign: 'middle', margin: 3 });
+  slide.addTable(rows, { x: b.x, y: b.y, w: b.w, border: { type: 'solid', pt: 0.5, color: b.rowB }, valign: 'middle', margin: 3 });
+}
+
+// Gradient line for a box: angle 0 runs left to right, 90 top to bottom, 135 top-right to bottom-left.
+export function gradientLine(angle, w, h) {
+  const a = (angle * Math.PI) / 180, dx = Math.cos(a), dy = Math.sin(a);
+  const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+  return { x1: w / 2 - dx * half, y1: h / 2 - dy * half, x2: w / 2 + dx * half, y2: h / 2 + dy * half };
+}
+// SVG text of a gradient box (used by Node via sharp, and as a fallback)
+export function gradientSvg(spec, wPx, hPx) {
+  const g = gradientLine(spec.angle, wPx, hPx);
+  const stops = spec.stops.map(([c, a, p]) => `<stop offset="${p}" stop-color="#${c}" stop-opacity="${a}"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${wPx}" height="${hPx}"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="${g.x1}" y1="${g.y1}" x2="${g.x2}" y2="${g.y2}">${stops}</linearGradient></defs><rect width="${wPx}" height="${hPx}" fill="url(#g)"/></svg>`;
 }
 
 // PptxGenJS links charts with absolute paths ("/ppt/charts/chart1.xml"). PowerPoint
@@ -127,16 +144,21 @@ export function looksLikeGraphic(corners) {
 }
 
 // entries: [{ boxes }] in slide order. getImageData(src, w, h, fit) -> { data, w, h, dx, dy } or null
-export async function buildPptx(entries, { PptxGenJS, getImageData }) {
+export async function buildPptx(entries, { PptxGenJS, getImageData, getGradient }) {
   const pres = new PptxGenJS();
   pres.layout = 'LAYOUT_WIDE';
   pres.theme = { headFontFace: F.body, bodyFontFace: F.body };
   pres.title = 'HSBC Slide Refresh';
   for (const entry of entries) {
     const slide = pres.addSlide();
-    slide.background = { color: C.white };
+    slide.background = { color: entry.background || 'FFFFFF' };
     for (const b of entry.boxes) {
       if (b.t === 'rect') slide.addShape(pres.shapes.RECTANGLE, { x: b.x, y: b.y, w: b.w, h: b.h, fill: { color: b.fill }, line: { type: 'none' } });
+      else if (b.t === 'ellipse') slide.addShape(pres.shapes.OVAL, { x: b.x, y: b.y, w: b.w, h: b.h, fill: { color: b.fill }, line: { type: 'none' } });
+      else if (b.t === 'gradient') {
+        const data = getGradient ? await getGradient(b) : null;
+        if (data) slide.addImage({ data, x: b.x, y: b.y, w: b.w, h: b.h });
+      }
       else if (b.t === 'text') addText(slide, b);
       else if (b.t === 'image') {
         const img = await getImageData(b.src, b.w, b.h, b.fit);

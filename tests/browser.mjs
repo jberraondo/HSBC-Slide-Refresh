@@ -1,4 +1,4 @@
-// End-to-end check in Chrome:  node tests/browser.mjs path/to/deck.pptx
+// End-to-end check in Chrome:  node tests/browser.mjs path/to/deck.pptx [--theme=svns]
 // Serves the site, loads the deck through the page's ?demo= hook, saves a screenshot,
 // clicks Download and checks a .pptx arrives. Needs Google Chrome installed.
 import puppeteer from 'puppeteer-core';
@@ -8,7 +8,8 @@ import { join, extname, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const deck = process.argv[2] || 'tests/sample.pptx';
+const deck = (process.argv[2] && !process.argv[2].startsWith('--')) ? process.argv[2] : 'tests/sample.pptx';
+const theme = (process.argv.find((a) => a.startsWith('--theme=')) || '').split('=')[1];
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.pptx': 'application/octet-stream' };
 const server = createServer((req, res) => {
   const p = join(root, decodeURIComponent(req.url.split('?')[0]));
@@ -27,6 +28,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.setViewport({ width: 1366, height: 900 });
+if (theme) await page.evaluateOnNewDocument((t) => localStorage.setItem('slide-refresh-theme', t), theme);
 const cdp = await page.target().createCDPSession();
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: out });
 await page.goto(`http://localhost:8765/?demo=/${relative(root, deck)}`, { waitUntil: 'networkidle0' });
@@ -34,11 +36,13 @@ await page.waitForSelector('.slide-row', { timeout: 60000 });
 await new Promise((r) => setTimeout(r, 2500));
 const rows = await page.$$eval('.slide-row', (els) => els.length);
 const opts = await page.$$eval('.option', (els) => els.length);
+const chosenTheme = await page.$eval('.theme.is-chosen', (e) => e.textContent.trim());
+const themes = await page.$$eval('.theme', (els) => els.length);
 await page.screenshot({ path: join(out, 'page-top.png') });
 await page.evaluate(() => window.scrollTo(0, 1600));
 await page.screenshot({ path: join(out, 'page-mid.png') });
 await page.click('#download');
 let file = null;
 for (let i = 0; i < 120 && !file; i++) { await new Promise((r) => setTimeout(r, 1000)); file = readdirSync(out).find((f) => f.endsWith('.pptx')); }
-console.log(JSON.stringify({ rows, options: opts, download: file || null, size: file ? statSync(join(out, file)).size : 0, status: await page.$eval('#status', (e) => e.textContent), errors }, null, 1));
+console.log(JSON.stringify({ rows, options: opts, themes, chosenTheme, download: file || null, size: file ? statSync(join(out, file)).size : 0, status: await page.$eval('#status', (e) => e.textContent), errors }, null, 1));
 await browser.close(); server.close();

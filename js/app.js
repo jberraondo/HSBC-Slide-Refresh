@@ -1,13 +1,15 @@
-import { STYLE } from './style.js';
+import { STYLE, THEMES, DEFAULT_THEME } from './style.js';
 import { parsePptx } from './parse.js';
 import { detect, extract, TYPES } from './classify.js';
-import { optionsFor } from './templates.js';
+import { optionsFor, renderWith } from './templates.js';
 import { buildPptx, finishFile } from './build.js';
 import { renderPreview } from './preview.js';
-import { imageMaker, thumbFor, markGraphics } from './images.js';
+import { imageMaker, thumbFor, markGraphics, makeGradient } from './images.js';
 
 const $ = (s) => document.querySelector(s);
-const state = { deck: null, fileName: '', rows: [], thumbs: new Map(), showHidden: false };
+let savedTheme = null;
+try { savedTheme = localStorage.getItem('slide-refresh-theme'); } catch { /* storage unavailable */ }
+const state = { deck: null, fileName: '', rows: [], thumbs: new Map(), showHidden: false, theme: THEMES[savedTheme] ? savedTheme : DEFAULT_THEME };
 
 // ---------- loading ----------
 async function load(file) {
@@ -65,7 +67,7 @@ function ctxFor(row) {
     if (r.include && r.type === 'divider') section++;
     if (r === row) break;
   }
-  return { section: Math.max(section, 1), label: `${STYLE.report}  |  ${$('#report-name').value.trim() || 'Report'}` };
+  return { section: Math.max(section, 1), label: `${STYLE.report}  |  ${$('#report-name').value.trim() || 'Report'}`, theme: THEMES[state.theme] };
 }
 
 function renderAll() {
@@ -100,7 +102,7 @@ function renderRow(row, i) {
     b.className = 'option' + (k === row.choice ? ' is-chosen' : '');
     b.setAttribute('aria-pressed', k === row.choice);
     let preview;
-    try { preview = renderPreview(o.render(row.model, ctxFor(row)), state.thumbs); }
+    try { preview = renderPreview(renderWith(o, row.model, ctxFor(row)), state.thumbs); }
     catch (e) { console.error(e); preview = '<div class="pv-slide pv-error">Preview unavailable</div>'; }
     b.innerHTML = `<div class="pv-frame">${preview}</div><span class="option-name">${escapeHtml(o.name)}</span>`;
     b.addEventListener('click', () => { row.choice = k; row.include = true; rerender(i); });
@@ -137,8 +139,9 @@ async function download() {
   btn.disabled = true;
   setStatus(`Building ${chosen.length} slides…`);
   try {
-    const entries = chosen.map((r) => ({ boxes: r.options[r.choice].render(r.model, ctxFor(r)) }));
-    const pres = await buildPptx(entries, { PptxGenJS: window.PptxGenJS, getImageData: imageMaker(state.deck) });
+    const bg = THEMES[state.theme].bg;
+    const entries = chosen.map((r) => ({ background: bg, boxes: renderWith(r.options[r.choice], r.model, ctxFor(r)) }));
+    const pres = await buildPptx(entries, { PptxGenJS: window.PptxGenJS, getImageData: imageMaker(state.deck), getGradient: makeGradient });
     const bytes = await finishFile(await pres.write({ outputType: 'arraybuffer' }), window.JSZip);
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
     const a = document.createElement('a');
@@ -159,6 +162,28 @@ function fitPreviews() {
   if (frame) document.documentElement.style.setProperty('--pv-scale', String(frame.clientWidth / 1333));
 }
 new ResizeObserver(fitPreviews).observe(document.body);
+
+// ---------- theme picker ----------
+function renderThemes() {
+  const box = $('#themes');
+  box.innerHTML = '';
+  Object.entries(THEMES).forEach(([key, t]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'theme' + (key === state.theme ? ' is-chosen' : '');
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', key === state.theme);
+    b.innerHTML = `<span class="swatch" style="background:#${t.bg}"><i style="background:#${t.glow ? t.glow[0] : t.panel}"></i><i style="background:#${t.surface}"></i><i style="background:#${t.accent}"></i></span><span>${t.name}</span>`;
+    b.addEventListener('click', () => {
+      state.theme = key;
+      try { localStorage.setItem('slide-refresh-theme', key); } catch { /* storage unavailable */ }
+      renderThemes();
+      if (state.rows.length) renderAll();
+    });
+    box.appendChild(b);
+  });
+}
+renderThemes();
 
 // ---------- helpers & wiring ----------
 function setStatus(msg, isError = false) { const s = $('#status'); s.textContent = msg; s.classList.toggle('is-error', isError); }
