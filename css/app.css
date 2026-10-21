@@ -96,3 +96,14 @@ button, input, select { font: inherit; color: inherit; }
   .toolbar-actions { margin-left: 0; }
   .options { grid-template-columns: 1fr; }
 }
+
+/* theme picker */
+.theme-pick { border: 0; padding: 14px 0 6px; margin: 0; border-bottom: 1px solid var(--line); }
+.theme-pick legend { font-size: 14px; color: var(--grey); padding: 0; margin-bottom: 8px; }
+.themes { display: flex; flex-wrap: wrap; gap: 10px; }
+.theme { display: flex; align-items: center; gap: 10px; background: #fff; border: 2px solid var(--line); padding: 6px 12px 6px 6px; cursor: pointer; font-size: 14px; }
+.theme:hover { border-color: var(--grey); }
+.theme.is-chosen { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); font-weight: 600; }
+.theme:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.swatch { display: inline-flex; gap: 3px; padding: 5px; border: 1px solid rgba(0,0,0,.15); }
+.swatch i { display: block; width: 12px; height: 22px; }

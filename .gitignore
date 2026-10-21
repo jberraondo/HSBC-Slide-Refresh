@@ -1,5 +1,8 @@
+node_modules
 node_modules/
 tests/out/
+tests/private
 tests/private/
 *.local.pptx
 .DS_Store
+.claude/

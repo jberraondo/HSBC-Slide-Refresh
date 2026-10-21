@@ -1,7 +1,6 @@
 // Draws the boxes from templates.js as a small HTML preview of the slide.
 // 1 inch = 100px on a 1333 x 750 canvas, scaled down with CSS.
 
-import { STYLE } from './style.js';
 
 const PX = 100;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -21,12 +20,12 @@ function chartSvg(b) {
   const w = b.w * PX, h = b.h * PX, pad = 30;
   const top = b.title ? 34 : 14, bottom = b.legend ? 46 : 26;
   let svg = '';
-  if (b.title) svg += `<text x="${w / 2}" y="22" text-anchor="middle" font-size="15" fill="#333">${esc(b.title)}</text>`;
+  if (b.title) svg += `<text x="${w / 2}" y="22" text-anchor="middle" font-size="15" fill="#${b.labelColor || "333333"}">${esc(b.title)}</text>`;
   if (b.kind === 'line') {
     const all = b.series.flatMap((s) => s.values).filter((v) => v != null);
     const max = Math.max(...all, 1), n = Math.max(b.cats.length, 2);
     const X = (i) => pad + (i * (w - 2 * pad)) / (n - 1), Y = (v) => h - bottom - ((h - top - bottom) * v) / max;
-    for (let g = 0; g <= 4; g++) svg += `<line x1="${pad}" x2="${w - pad}" y1="${Y((max * g) / 4)}" y2="${Y((max * g) / 4)}" stroke="#e3e3e3"/>`;
+    for (let g = 0; g <= 4; g++) svg += `<line x1="${pad}" x2="${w - pad}" y1="${Y((max * g) / 4)}" y2="${Y((max * g) / 4)}" stroke="#${b.gridColor || "e3e3e3"}"/>`;
     b.series.forEach((s, si) => {
       const pts = s.values.map((v, i) => (v == null ? null : `${X(i)},${Y(v)}`)).filter(Boolean).join(' ');
       svg += `<polyline points="${pts}" fill="none" stroke="#${b.colors[si]}" stroke-width="3"/>`;
@@ -37,14 +36,14 @@ function chartSvg(b) {
     vals.forEach((v, i) => {
       const bh = ((h - top - bottom) * v) / max;
       svg += `<rect x="${pad + i * bw + bw * 0.2}" y="${h - bottom - bh}" width="${bw * 0.6}" height="${bh}" fill="#${b.pointColors[i]}"/>`;
-      svg += `<text x="${pad + i * bw + bw / 2}" y="${h - bottom + 16}" text-anchor="middle" font-size="11" fill="#767676">${esc(b.cats[i])}</text>`;
+      svg += `<text x="${pad + i * bw + bw / 2}" y="${h - bottom + 16}" text-anchor="middle" font-size="11" fill="#${b.textColor || "767676"}">${esc(b.cats[i])}</text>`;
     });
   } else if (b.kind === 'bar100') {
     const rows = b.cats.length, rh = (h - 50) / Math.max(rows, 1), lx = 130;
     b.cats.forEach((cat, r) => {
       const tot = b.series.reduce((a, s) => a + (s.values[r] || 0), 0) || 1;
       let xx = lx;
-      svg += `<text x="${lx - 10}" y="${40 + r * rh + rh / 2}" text-anchor="end" font-size="13" fill="#333">${esc(cat)}</text>`;
+      svg += `<text x="${lx - 10}" y="${40 + r * rh + rh / 2}" text-anchor="end" font-size="13" fill="#${b.labelColor || "333333"}">${esc(cat)}</text>`;
       b.series.forEach((s, si) => {
         const ww = ((w - lx - 10) * (s.values[r] || 0)) / tot;
         svg += `<rect x="${xx}" y="${30 + r * rh + rh * 0.15}" width="${Math.max(ww, 2)}" height="${rh * 0.6}" fill="#${b.colors[si]}"/>`;
@@ -69,21 +68,33 @@ function chartSvg(b) {
     const step = Math.min(160, (w - 20) / Math.max(names.length, 1));
     const start = w / 2 - (step * names.length) / 2;
     names.forEach((n, i) => {
-      svg += `<rect x="${start + i * step}" y="${y - 9}" width="10" height="10" fill="#${cols[i]}"/><text x="${start + i * step + 14}" y="${y}" font-size="11" fill="#333">${esc(n)}</text>`;
+      svg += `<rect x="${start + i * step}" y="${y - 9}" width="10" height="10" fill="#${cols[i]}"/><text x="${start + i * step + 14}" y="${y}" font-size="11" fill="#${b.legendColor || "333333"}">${esc(n)}</text>`;
     });
   }
   return `<svg class="pv-chart" style="${pos(b)}" viewBox="0 0 ${w} ${h}">${svg}</svg>`;
 }
 
 function tableHtml(b) {
-  const rows = b.rows.map((r, i) => `<tr>${r.map((c) => `<td style="${i === 0 ? `background:#${STYLE.colors.red};color:#fff;font-weight:700;` : i % 2 ? `background:#${STYLE.colors.card};` : ''}">${esc(c)}</td>`).join('')}</tr>`).join('');
+  const rows = b.rows.map((r, i) => `<tr>${r.map((c) => `<td style="${i === 0 ? `background:#${b.head};color:#${b.onHead};font-weight:700;` : `background:#${i % 2 ? b.rowA : b.rowB};color:#${b.ink};`}">${esc(c)}</td>`).join('')}</tr>`).join('');
   return `<table class="pv-table" style="${pos(b)}height:auto">${rows}</table>`;
+}
+
+function rgba(hex, a) {
+  const n = parseInt(hex, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function cssGradient(b) {
+  // CSS angles start at "to top" (0deg); ours start at "to the right"
+  const stops = b.stops.map(([c, a, p]) => `${rgba(c, a)} ${Math.round(p * 100)}%`).join(',');
+  return `linear-gradient(${b.angle + 90}deg,${stops})`;
 }
 
 // thumbs: Map from image path -> object URL (filled in lazily by the app)
 export function renderPreview(boxes, thumbs) {
   const parts = boxes.map((b) => {
     if (b.t === 'rect') return `<div class="pv-box" style="${pos(b)}background:#${b.fill}"></div>`;
+    if (b.t === 'ellipse') return `<div class="pv-box" style="${pos(b)}background:#${b.fill};border-radius:50%"></div>`;
+    if (b.t === 'gradient') return `<div class="pv-box" style="${pos(b)}background:${cssGradient(b)}"></div>`;
     if (b.t === 'text') return textHtml(b);
     if (b.t === 'chart') return chartSvg(b);
     if (b.t === 'table') return tableHtml(b);

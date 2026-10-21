@@ -3,7 +3,7 @@
 // "picture can't be displayed" when slides are pasted into other decks).
 
 import { STYLE } from './style.js';
-import { cropBox, looksLikeGraphic } from './build.js';
+import { cropBox, looksLikeGraphic, gradientLine } from './build.js';
 
 const bitmaps = new Map();
 
@@ -53,6 +53,23 @@ export async function thumbFor(deck, src) {
   const r = cropBox(bmp.width, bmp.height, src.crop, 1, 1, 'none');
   const canvas = draw(bmp, r, 480);
   return new Promise((res) => canvas.toBlob((b) => res(b ? URL.createObjectURL(b) : null), 'image/jpeg', 0.8));
+}
+
+// Gradient boxes (glows and photo fades) become PNG images in the .pptx,
+// because PptxGenJS fills can't hold transparency gradients.
+export async function makeGradient(spec) {
+  const scale = Math.min(150, 1800 / Math.max(spec.w, spec.h));
+  const w = Math.max(2, Math.round(spec.w * scale)), h = Math.max(2, Math.round(spec.h * scale));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const line = gradientLine(spec.angle, w, h);
+  const lg = ctx.createLinearGradient(line.x1, line.y1, line.x2, line.y2);
+  for (const [hex, a, p] of spec.stops) {
+    const n = parseInt(hex, 16);
+    lg.addColorStop(Math.min(Math.max(p, 0), 1), `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`);
+  }
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
+  return c.toDataURL('image/png').replace(/^data:/, '');
 }
 
 // Marks each picture element with .graphic (screenshot/logo) by sampling its corners.

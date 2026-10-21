@@ -13,17 +13,34 @@ A free web tool that turns PowerPoint report slides into the HSBC Sport report l
 
 Everything runs in your browser. **Your file is never uploaded anywhere**, so it's safe for client decks.
 
+## Themes
+
+Pick a theme at the top of the slide list and every layout and preview switches to it:
+
+| Theme | Look |
+|---|---|
+| HSBC Classic | White slides, red stat cards, grey cards (the Q3 report look) |
+| SVNS Dark (red glow) | Near-black slides with a red glow, as in the SVNS / Dubai decks |
+| Midnight | Pure black with bold red figures |
+| Charcoal | Dark grey with red panels |
+| All Red | Red slides with white cards |
+| Soft Grey | Light grey slides, white cards, charcoal dividers |
+| Mono | Black and white, red only for drops |
+| Blockbuster Gold | Black with gold highlights |
+
+The chosen theme is remembered on that computer. To add or change a theme, edit `THEMES` in [`js/style.js`](js/style.js).
+
 ## What it recognises
 
 | Slide type | Layouts |
 |---|---|
-| Cover | Red panel cover |
-| Contents | Red panel list with photo, numbered list |
-| Section divider | Red panel with number, full photo with red band, clean title with photo strip |
-| Headline figures (e.g. "184M Impressions, +128% on Q3 2025") | Red stat cards, clean row of figures, colour block |
-| Content cards (photo + title + "Key Results") | Card grid (1 to 8 cards), wide hero cards, single feature |
-| Charts (line, bar, doughnut) | Stat cards above each chart, charts on cards, hero chart, share-of-total bars, donut on a card |
-| Learnings / text | Numbered cards, side by side, headings and bullets |
+| Cover | Panel and photo, full photo fading to title, glow, title left / photo right |
+| Contents | Panel list with photo, photo and numbered grid, numbered list |
+| Section divider | Panel with number, glow with big title, photo fading into title, full photo with band, clean title with photo strip |
+| Headline figures (e.g. "184M Impressions, +128% on Q3 2025") | Stat cards, one big number, clean row, figure list, colour block |
+| Content cards (photo + title + "Key Results") | Card grid (1 to 8 cards), photo cards with text on top, image and text rows, wide hero cards, single feature |
+| Charts (line, bar, doughnut) | Stat cards above each chart, charts on cards, big chart with insight panel, hero chart, share-of-total bars, donut on a card, share cards |
+| Learnings / text | Numbered cards, insight statement, numbered circles, side by side, headings and bullets, copy over photo fade |
 | Tables | Styled tables with copy |
 
 If a slide is put in the wrong type, change it with the **Slide type** menu and the layouts update.
